@@ -89,28 +89,34 @@ public class MainActivity extends Activity {
 
     private String copyIconToCache(Uri uri) {
         try {
+            // Read entire file into memory once
             InputStream in = getContentResolver().openInputStream(uri);
-            File f = new File(getCacheDir(), "custom_icon.png");
-            FileOutputStream out = new FileOutputStream(f);
+            java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
             byte[] buf = new byte[8192];
             int n;
-            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
-            in.close(); out.close();
-            // Also copy to output dir
+            while ((n = in.read(buf)) > 0) bos.write(buf, 0, n);
+            in.close();
+            byte[] data = bos.toByteArray();
+            if (data.length == 0) return null;
+
+            // Write to cache
+            File f = new File(getCacheDir(), "custom_icon.png");
+            FileOutputStream out = new FileOutputStream(f);
+            out.write(data);
+            out.close();
+
+            // Write to output dir (same bytes)
             try {
                 File outDir = new File(OUTPUT_DIR);
-                if (outDir.canWrite()) {
-                    File dest = new File(outDir, "custom_icon.png");
-                    InputStream in2 = getContentResolver().openInputStream(uri);
-                    FileOutputStream out2 = new FileOutputStream(dest);
-                    byte[] buf2 = new byte[8192];
-                    int n2;
-                    while ((n2 = in2.read(buf2)) > 0) out2.write(buf2, 0, n2);
-                    in2.close(); out2.close();
-                    return dest.getAbsolutePath();
-                }
-            } catch (Exception ignored) {}
-            return f.getAbsolutePath();
+                if (!outDir.exists()) outDir.mkdirs();
+                File dest = new File(outDir, "custom_icon.png");
+                FileOutputStream out2 = new FileOutputStream(dest);
+                out2.write(data);
+                out2.close();
+                return dest.getAbsolutePath();
+            } catch (Exception e2) {
+                return f.getAbsolutePath();
+            }
         } catch (Exception e) {
             return null;
         }

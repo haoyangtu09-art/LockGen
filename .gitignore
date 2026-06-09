@@ -2,7 +2,9 @@
 build/
 app/build/
 local.properties
-*.apk
 *.ap_
 *.dex
 *.class
+# Don't ignore base.apk in assets
+*.apk
+!app/src/main/assets/base.apk

@@ -3,6 +3,9 @@ package com.lockgen.app;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.ProgressDialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
@@ -376,19 +379,23 @@ public class MainActivity extends Activity {
         AlertDialog.Builder b = new AlertDialog.Builder(this);
         b.setTitle("生成结果");
         if (output.contains("[✓] 签名完成") || output.contains("APK 已生成到")) {
-            b.setMessage("APK 生成成功!\n\n输出目录:\n/storage/emulated/0/666/dy/\n\n点击确定查看文件");
-            b.setPositiveButton("查看", (d, w) -> {
+            b.setMessage("APK 生成成功!\n\n输出: /storage/emulated/0/666/dy/");
+            b.setPositiveButton("查看文件", (d, w) -> {
                 try {
-                    Intent intent = new Intent(Intent.ACTION_VIEW);
-                    intent.setDataAndType(Uri.parse("/storage/emulated/0/666/dy/"), "resource/folder");
-                    startActivity(intent);
+                    startActivity(new Intent(Intent.ACTION_VIEW)
+                            .setDataAndType(Uri.parse("/storage/emulated/0/666/dy/"), "resource/folder"));
                 } catch (Exception e) {
                     Toast.makeText(this, "请到文件管理器查看", Toast.LENGTH_SHORT).show();
                 }
             });
         } else {
-            b.setMessage("自动化执行失败，请手动在Termux中运行:\n\nbash /storage/emulated/0/666/dy/gen_lock.sh -y\n\n(配置已自动保存)");
-            b.setPositiveButton("知道了", null);
+            String cmd = "bash /storage/emulated/0/666/dy/gen_lock.sh -y";
+            b.setMessage("请在 Termux 中运行以下命令:\n\n" + cmd + "\n\n(配置已保存，按下方按钮复制命令)");
+            b.setPositiveButton("复制命令", (d, w) -> {
+                ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                cm.setPrimaryClip(ClipData.newPlainText("cmd", cmd));
+                Toast.makeText(this, "已复制! 到Termux粘贴运行", Toast.LENGTH_LONG).show();
+            });
         }
         b.setNegativeButton("关闭", null);
         b.show();

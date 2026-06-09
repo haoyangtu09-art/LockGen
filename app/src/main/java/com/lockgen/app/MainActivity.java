@@ -4,13 +4,16 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.Settings;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
@@ -33,6 +36,7 @@ public class MainActivity extends Activity {
 
     private static final String SCRIPT_PATH = "/storage/emulated/0/666/dy/gen_lock.sh";
     private static final String CONFIG_PATH = "/storage/emulated/0/666/dy/lock_config.conf";
+    private static final int REQ_MANAGE_STORAGE = 1001;
 
     private final LinkedHashMap<String, EditText> stringFields = new LinkedHashMap<>();
     private final LinkedHashMap<String, EditText> colorFields = new LinkedHashMap<>();
@@ -42,6 +46,27 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(createUI());
+        ensureStoragePermission();
+    }
+
+    private void ensureStoragePermission() {
+        if (Build.VERSION.SDK_INT >= 30) {
+            if (!Environment.isExternalStorageManager()) {
+                Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                        Uri.parse("package:" + getPackageName()));
+                startActivityForResult(intent, REQ_MANAGE_STORAGE);
+            }
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_MANAGE_STORAGE) {
+            if (Build.VERSION.SDK_INT >= 30 && Environment.isExternalStorageManager()) {
+                Toast.makeText(this, "文件权限已获取", Toast.LENGTH_SHORT).show();
+            }
+        }
     }
 
     private View createUI() {
@@ -256,7 +281,7 @@ public class MainActivity extends Activity {
     // ── Generate ──
 
     private void generateApk() {
-        // Build config
+        // Build config content
         StringBuilder sb = new StringBuilder();
         sb.append("# 锁机APK配置\n");
         for (Map.Entry<String, EditText> e : stringFields.entrySet()) {
@@ -265,17 +290,15 @@ public class MainActivity extends Activity {
         for (Map.Entry<String, EditText> e : colorFields.entrySet()) {
             sb.append(envKey(e.getKey())).append("=\"").append(e.getValue().getText()).append("\"\n");
         }
+        String configContent = sb.toString();
 
-        // Save config
-        try {
-            File f = new File(CONFIG_PATH);
-            FileOutputStream fos = new FileOutputStream(f);
-            fos.write(sb.toString().getBytes());
-            fos.close();
-        } catch (Exception ex) {
-            Toast.makeText(this, "保存配置失败: " + ex.getMessage(), Toast.LENGTH_LONG).show();
+        // Save config - try multiple paths
+        String savedPath = saveConfigFile(configContent);
+        if (savedPath == null) {
+            Toast.makeText(this, "保存配置失败，请检查存储权限", Toast.LENGTH_LONG).show();
             return;
         }
+        statusText.setText("配置已保存: " + savedPath);
 
         // Try to run script directly
         ProgressDialog pd = new ProgressDialog(this);
@@ -290,6 +313,45 @@ public class MainActivity extends Activity {
                 showResult(result);
             });
         }).start();
+    }
+
+    private String saveConfigFile(String content) {
+        // Try 1: Direct path (works with MANAGE_EXTERNAL_STORAGE or on older Android)
+        try {
+            File dir = new File("/storage/emulated/0/666/dy");
+            if (!dir.exists()) dir.mkdirs();
+            File f = new File(dir, "lock_config.conf");
+            FileOutputStream fos = new FileOutputStream(f);
+            fos.write(content.getBytes());
+            fos.close();
+            return f.getAbsolutePath();
+        } catch (Exception e1) {
+            // fall through
+        }
+
+        // Try 2: App's external files dir
+        try {
+            File dir = getExternalFilesDir(null);
+            if (dir != null) {
+                File f = new File(dir, "lock_config.conf");
+                FileOutputStream fos = new FileOutputStream(f);
+                fos.write(content.getBytes());
+                fos.close();
+                return f.getAbsolutePath();
+            }
+        } catch (Exception e2) {
+            // fall through
+        }
+
+        // Try 3: Internal files dir (always works)
+        try {
+            FileOutputStream fos = openFileOutput("lock_config.conf", MODE_PRIVATE);
+            fos.write(content.getBytes());
+            fos.close();
+            return getFilesDir() + "/lock_config.conf";
+        } catch (Exception e3) {
+            return null;
+        }
     }
 
     private String runScript() {
